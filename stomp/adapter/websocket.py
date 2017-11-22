@@ -27,23 +27,29 @@ class WebSocketTransport(Transport):
         self.subscriptions = {}
         self.current_host_and_port = ('128.0.0.1', 8765)
         print('WebSocketTransport::__init__')
-
+        
          
-
+    async def connecting(self):
+        websocket = await websockets.connect('ws://localhost:8765')
+        return websocket
+    async def disconnecting(self, websocket):
+        await websocket.close()
+        
+            
+    async def sending(self, websocket, msg):
+        print("Sending< {}" .format(msg))
+        await websocket.send(msg)
+    
+    async def receiving(self, websocket):
+        rec_message = await websocket.recv()
+        return rec_message
+    
     def attempt_connection(self):
         """
         Establish a multicast connection - uses 2 sockets (one for sending, the other for receiving)
         """
-        async def hello():
-            async with websockets.connect('ws://localhost:8765') as websocket:
-                
-                await websocket.send('test to send a stomp message over WebSocket')
-                print("> {}".format('test to send a stomp message over WebSocket'))
-        
-                greeting = await websocket.recv()
-                print("< {}".format(greeting))   
-#         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-#         self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+        self.websocket = asyncio.get_event_loop().run_until_complete(self.connecting())
+#          self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 # 
 #         self.receiver_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 #         self.receiver_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -52,7 +58,7 @@ class WebSocketTransport(Transport):
 #         mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
 #         self.receiver_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         print('WebSocketTransport::Attemp_Connection')
-        asyncio.get_event_loop().run_until_complete(hello())
+       
 
 #         if not self.socket or not self.receiver_socket:
 #             raise exception.ConnectFailedException()
@@ -64,16 +70,19 @@ class WebSocketTransport(Transport):
         :param bytes encoded_frame:
         """
         print('WebSocketTransport::Send')
-        self.socket.sendto(encoded_frame, (MCAST_GRP, MCAST_PORT))
-
+#         self.socket.sendto(encoded_frame, (MCAST_GRP, MCAST_PORT))
+        asyncio.get_event_loop().run_until_complete(self.sending(self.websocket, encoded_frame))
+    
+    
+    
     def receive(self):
         """
         Receive 1024 bytes from the multicast receiver socket.
 
         :rtype: bytes
         """
-        print('WebSocketTransport::receive')
-        return self.receiver_socket.recv(1024)
+        message = asyncio.get_event_loop().run_until_complete(self.receiving(self.websocket))
+        return message
 
     def process_frame(self, f, frame_str):
         """
@@ -104,12 +113,7 @@ class WebSocketTransport(Transport):
    
     def stop(self):
         print('WebSocketTransport::stop')
-
-        self.running = False
-        if hasattr(self.receiver_socket, 'SHUT_RDWR'):
-            self.receiver_socket.shutdown(socket.SHUT_RDWR)
-        self.receiver_socket.close()
-        self.disconnect_socket()
+        
         Transport.stop(self)
 
 
